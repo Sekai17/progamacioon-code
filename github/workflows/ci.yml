@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  pull_request:
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - '**/*.rst'
+      - '**/*.txt'
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - '**/*.rst'
+      - '**/*.txt'
+
+jobs:
+  test:
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Classify changes
+        id: changed
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            docs:
+              - '**/*.md'
+              - 'docs/**'
+              - '**/*.rst'
+              - '**/*.txt'
+            code:
+              - 'src/**'
+              - '**/*.py'
+              - '**/*.js'
+              - '**/*.ts'
+              - '**/*.tsx'
+              - '**/*.go'
+              - '**/*.java'
+              - '**/*.kt'
+              - '**/*.cs'
+              - '**/*.cpp'
+              - '**/*.c'
+              - '**/*.rb'
+              - '**/*.php'
+              - '**/*.sh'
+              - '!**/*_test.*'
+
+      - name: Skip if docs-only
+        if: steps.changed.outputs.code == 'false' && steps.changed.outputs.docs == 'true'
+        run: echo "Docs-only change → skipping tests." && exit 0
+
+      - name: Set up Node (if present)
+        if: steps.changed.outputs.code == 'true' && hashFiles('package.json') != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install deps (Node)
+        if: steps.changed.outputs.code == 'true' && hashFiles('package.json') != ''
+        run: npm ci
+
+      - name: Run tests (Node)
+        if: steps.changed.outputs.code == 'true' && hashFiles('package.json') != ''
+        run: npm test --silent
+
+      - name: Set up Python (if present)
+        if: steps.changed.outputs.code == 'true' && hashFiles('requirements.txt') != ''
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deps (Python)
+        if: steps.changed.outputs.code == 'true' && hashFiles('requirements.txt') != ''
+        run: pip install -r requirements.txt
+
+      - name: Run tests (Python)
+        if: steps.changed.outputs.code == 'true' && hashFiles('requirements.txt') != ''
+        run: pytest -q
